@@ -375,17 +375,15 @@ result<uint64_t> Parser::get_dynamic_string_table_from_segments() const {
     return 0;
   }
 
-  const uint64_t offset = dyn_segment->file_offset();
-  const uint64_t size   = dyn_segment->physical_size();
+  const uint64_t offset = *binary_->virtual_address_to_offset(dyn_segment->virtual_address());
 
   stream_->setpos(offset);
 
   const ARCH arch = binary_->header().machine_type();
 
   if (binary_->type_ == Header::CLASS::ELF32) {
-    size_t nb_entries = size / sizeof(details::Elf32_Dyn);
-
-    for (size_t i = 0; i < nb_entries; ++i) {
+    bool end_of_dynamic = false;
+    for (size_t i = 0; i < Parser::NB_MAX_DYNAMIC_ENTRIES; ++i) {
       auto res = stream_->read<details::Elf32_Dyn>();
       if (!res) {
         LIEF_ERR("Can't read dynamic entry #{}", i);
@@ -393,14 +391,27 @@ result<uint64_t> Parser::get_dynamic_string_table_from_segments() const {
       }
       auto dt = *res;
 
-      if (DynamicEntry::from_value(dt.d_tag, arch) == DynamicEntry::TAG::STRTAB) {
-        return binary_->virtual_address_to_offset(dt.d_un.d_val);
+      switch (DynamicEntry::from_value(dt.d_tag, arch)) {
+        case DynamicEntry::TAG::STRTAB:
+          {
+            return binary_->virtual_address_to_offset(dt.d_un.d_val);
+          }
+        case DynamicEntry::TAG::DT_NULL_:
+          {
+            end_of_dynamic = true;
+            break;
+          }
+        default:
+          {
+            break;
+          }
       }
+      if (end_of_dynamic) break;
     }
 
   } else {
-    size_t nb_entries = size / sizeof(details::Elf64_Dyn);
-    for (size_t i = 0; i < nb_entries; ++i) {
+    bool end_of_dynamic = false;
+    for (size_t i = 0; i < Parser::NB_MAX_DYNAMIC_ENTRIES; ++i) {
       auto res = stream_->read<details::Elf64_Dyn>();
       if (!res) {
         LIEF_ERR("Can't read dynamic entry #{}", i);
@@ -408,9 +419,22 @@ result<uint64_t> Parser::get_dynamic_string_table_from_segments() const {
       }
       const auto dt = *res;
 
-      if (DynamicEntry::from_value(dt.d_tag, arch) == DynamicEntry::TAG::STRTAB) {
-        return binary_->virtual_address_to_offset(dt.d_un.d_val);
+      switch (DynamicEntry::from_value(dt.d_tag, arch)) {
+        case DynamicEntry::TAG::STRTAB:
+          {
+            return binary_->virtual_address_to_offset(dt.d_un.d_val);
+          }
+        case DynamicEntry::TAG::DT_NULL_:
+          {
+            end_of_dynamic = true;
+            break;
+          }
+        default:
+          {
+            break;
+          }
       }
+      if (end_of_dynamic) break;
     }
   }
   return 0;

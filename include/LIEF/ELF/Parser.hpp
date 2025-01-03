@@ -158,7 +158,7 @@ class LIEF_API Parser : public LIEF::Parser {
   LIEF_LOCAL result<uint32_t> nb_dynsym_relocations() const;
 
   template<typename ELF_T>
-  LIEF_LOCAL ok_error_t parse_dynamic_entries(uint64_t offset, uint64_t size);
+  LIEF_LOCAL ok_error_t parse_dynamic_entries(uint64_t offset);
 
   template<typename ELF_T>
   LIEF_LOCAL ok_error_t parse_dynamic_symbols(uint64_t offset);

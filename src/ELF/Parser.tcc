@@ -87,11 +87,11 @@ ok_error_t Parser::parse_binary() {
 
   // Find the dynamic Segment
   if (const Segment* seg_dyn = binary_->get(Segment::TYPE::DYNAMIC)) {
-    const Elf_Off offset = seg_dyn->file_offset();
-    const Elf_Off size   = seg_dyn->physical_size();
+    const Elf_Off offset = *binary_->virtual_address_to_offset(seg_dyn->virtual_address());
 
-    parse_dynamic_entries<ELF_T>(offset, size);
-    binary_->sizing_info_->dynamic = size;
+    parse_dynamic_entries<ELF_T>(offset);
+    using Elf_Dyn = typename ELF_T::Elf_Dyn;
+    binary_->sizing_info_->dynamic = binary_->dynamic_entries_.size() * sizeof(Elf_Dyn);
   }
 
   process_dynamic_table<ELF_T>();
@@ -1267,7 +1267,7 @@ ok_error_t Parser::parse_dynamic_symbols(uint64_t offset) {
 
 
 template<typename ELF_T>
-ok_error_t Parser::parse_dynamic_entries(uint64_t offset, uint64_t size) {
+ok_error_t Parser::parse_dynamic_entries(uint64_t offset) {
   using Elf_Dyn  = typename ELF_T::Elf_Dyn;
   using uint__   = typename ELF_T::uint;
   using Elf_Addr = typename ELF_T::Elf_Addr;
@@ -1275,16 +1275,13 @@ ok_error_t Parser::parse_dynamic_entries(uint64_t offset, uint64_t size) {
 
   LIEF_DEBUG("== Parsing dynamic section ==");
 
-  uint32_t nb_entries = size / sizeof(Elf_Dyn);
-  nb_entries = std::min<uint32_t>(nb_entries, Parser::NB_MAX_DYNAMIC_ENTRIES);
-
-  LIEF_DEBUG(".dynamic@0x{:x}:0x{:x} #", offset, size, nb_entries);
+  LIEF_DEBUG(".dynamic@0x{:x}", offset);
 
   Elf_Off dynamic_string_offset = get_dynamic_string_table();
 
   bool end_of_dynamic = false;
   stream_->setpos(offset);
-  for (size_t dynIdx = 0; dynIdx < nb_entries; ++dynIdx) {
+  for (size_t dynIdx = 0; dynIdx < Parser::NB_MAX_DYNAMIC_ENTRIES; ++dynIdx) {
     const auto res_entry = stream_->read<Elf_Dyn>();
     if (!res_entry) {
       break;
@@ -1398,6 +1395,7 @@ ok_error_t Parser::parse_dynamic_entries(uint64_t offset, uint64_t size) {
     }
 
     if (end_of_dynamic) {
+      LIEF_DEBUG(".dynamic@0x{:x}:0x{:x} #", offset, binary_->dynamic_entries_.size() * sizeof(Elf_Dyn), dynIdx + 1);
       break;
     }
   }
